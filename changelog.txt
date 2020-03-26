@@ -1,3 +1,7 @@
+[B]Version 5.0.60 (March 26, 2020)[/B]
+- Resolvers Fixed/Updated:
+    - videa
+    
 [B]Version 5.0.59 (March 24, 2020)[/B]
 - Code Base Changes:
     - none

@@ -24,6 +24,7 @@ class VideaResolver(UrlResolver):
     name = "videa"
     domains = ["videa.hu", "videakid.hu"]
     pattern = '(?://|\.)((?:videa|videakid)\.hu)/(?:player/?\?v=|videok/)(?:.*-|)([0-9a-zA-Z]+)'
+    originalURL = ""
 
     def __init__(self):
         self.net = common.Net()
@@ -43,4 +44,18 @@ class VideaResolver(UrlResolver):
         raise ResolverError('Stream not found')
 
     def get_url(self, host, media_id):
-        return self._default_get_url(host, media_id, 'http://{host}/videaplayer_get_xml.php?v={media_id}&start=0&referrer=http://{host}')
+        headers = {'User-Agent': common.FF_USER_AGENT}
+        html = self.net.http_GET(self.originalURL, headers=headers).content
+        matches=re.search(r'(.*)<iframe id="videa_player_iframe"(.*)src="/player\?([0-9a-zA-Z\.=]*)(.*)', html, re.DOTALL)
+        if matches != None:
+            return 'http://%s/videaplayer_get_xml.php?%s&start=0&enableSnapshot=0&enableSnapshotApi=1&enableAnimGif=1&platform=desktop&referrer=%s?start=0' % (host, matches.group(3), self.originalURL)
+        else:
+            return self._default_get_url(host, media_id, 'http://{host}/videaplayer_get_xml.php?v={media_id}&start=0&referrer=http://{host}')
+
+    def get_host_and_id(self, url):
+        self.originalURL = url
+        r = re.search(self.pattern, url, re.I)
+        if r:
+            return r.groups()
+        else:
+            return False
