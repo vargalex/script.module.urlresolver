@@ -2,7 +2,7 @@
 """
     Kodi urlresolver plugin
     Copyright (C) 2016  alifrezser
-
+    
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
@@ -20,31 +20,42 @@ from lib import helpers
 from urlresolver import common
 from urlresolver.resolver import UrlResolver, ResolverError
 
-
 class VideaResolver(UrlResolver):
     name = "videa"
     domains = ["videa.hu", "videakid.hu"]
-    pattern = r'(?://|\.)((?:videa|videakid)\.hu)/(?:player/?\?v=|player/v/|videok/)(?:.*-|)([0-9a-zA-Z]+)'
+    pattern = '(?://|\.)((?:videa|videakid)\.hu)/(?:player/?\?v=|videok/)(?:.*-|)([0-9a-zA-Z]+)'
+    originalURL = ""
 
     def __init__(self):
         self.net = common.Net()
 
     def get_media_url(self, host, media_id):
         web_url = self.get_url(host, media_id)
-        headers = {'User-Agent': common.FF_USER_AGENT,
-                   'Referer': 'https://{0}/player?v={1}'.format(host, media_id),
-                   'X-Requested-With': 'XMLHttpRequest'}
+        headers = {'User-Agent': common.FF_USER_AGENT}
         html = self.net.http_GET(web_url, headers=headers).content
-        sources = re.findall(r'video_source\s*name="(?P<label>[^"]+)[^>]+>(?P<url>[^<]+)', html)
 
+        sources = helpers.get_dom(html, 'video_sources')
         if sources:
+            sources = re.findall('name\s*=\s*[\'|"]([^\'"]+).+?streamable.+?>([^<]+)', sources[0])
             source = helpers.pick_source(helpers.sort_sources_list(sources))
-            source = 'https:' + source if source.startswith('//') else source
-            headers.pop('X-Requested-With')
-            headers.update({'Origin': 'https://{}'.format(host)})
-            return source.replace('&amp;', '&') + helpers.append_headers(headers)
+            if source.startswith('//'): source = 'http:' + source
+            return source.replace('&amp;', '&')
 
         raise ResolverError('Stream not found')
 
     def get_url(self, host, media_id):
-        return self._default_get_url(host, media_id, 'https://{host}/videaplayer_get_xml.php?v={media_id}&start=0&referrer=http://{host}')
+        headers = {'User-Agent': common.FF_USER_AGENT}
+        html = self.net.http_GET(self.originalURL, headers=headers).content
+        matches=re.search(r'(.*)<iframe id="videa_player_iframe"(.*)src="/player\?([0-9a-zA-Z\.=]*)(.*)', html, re.DOTALL)
+        if matches != None:
+            return 'http://%s/videaplayer_get_xml.php?%s&start=0&enableSnapshot=0&enableSnapshotApi=1&enableAnimGif=1&platform=desktop&referrer=%s?start=0' % (host, matches.group(3), self.originalURL)
+        else:
+            return self._default_get_url(host, media_id, 'http://{host}/videaplayer_get_xml.php?v={media_id}&start=0&referrer=http://{host}')
+
+    def get_host_and_id(self, url):
+        self.originalURL = url
+        r = re.search(self.pattern, url, re.I)
+        if r:
+            return r.groups()
+        else:
+            return False
